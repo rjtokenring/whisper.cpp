@@ -2177,8 +2177,10 @@ static struct ggml_cgraph * whisper_build_graph_encoder(
                         0, 2, 1, 3);
 
             if (wctx.params.flash_attn) {
-                ggml_build_forward_expand(gf, ggml_cpy(ctx0, Kcur, ggml_view_1d(ctx0, kv_pad.k, n_ctx*n_state, 0)));
-                ggml_build_forward_expand(gf, ggml_cpy(ctx0, Vcur, ggml_view_1d(ctx0, kv_pad.v, n_ctx*n_state, 0)));
+                // reshape src to 1D so that src and dst have the same shape (needed by backends that
+                // cannot convert and reshape in a single CPY, e.g. Hexagon)
+                ggml_build_forward_expand(gf, ggml_cpy(ctx0, ggml_reshape_1d(ctx0, Kcur, n_ctx*n_state), ggml_view_1d(ctx0, kv_pad.k, n_ctx*n_state, 0)));
+                ggml_build_forward_expand(gf, ggml_cpy(ctx0, ggml_reshape_1d(ctx0, Vcur, n_ctx*n_state), ggml_view_1d(ctx0, kv_pad.v, n_ctx*n_state, 0)));
 
                 struct ggml_tensor * K =
                     ggml_view_3d(ctx0, kv_pad.k,
@@ -2363,6 +2365,8 @@ static struct ggml_cgraph * whisper_build_graph_cross(
 
             v = ggml_view_1d(ctx0, wstate.kv_cross.v, n_state*n_ctx,
                     (ggml_element_size(wstate.kv_cross.v)*n_state)*(il*n_ctx_pad));
+
+            Vcross = ggml_reshape_1d(ctx0, Vcross, n_state*n_ctx);
         } else {
             Vcross = ggml_transpose(ctx0, ggml_reshape_2d(ctx0, Vcross, n_state, n_ctx));
 
@@ -2373,6 +2377,8 @@ static struct ggml_cgraph * whisper_build_graph_cross(
                     (   n_ctx)*ggml_element_size(wstate.kv_cross.v),
                     (il*n_ctx)*ggml_element_size(wstate.kv_cross.v)*n_state);
         }
+
+        Kcross = ggml_reshape_1d(ctx0, Kcross, n_state*n_ctx);
 
         ggml_build_forward_expand(gf, ggml_cpy(ctx0, Kcross, k));
         ggml_build_forward_expand(gf, ggml_cpy(ctx0, Vcross, v));
@@ -2634,6 +2640,8 @@ static struct ggml_cgraph * whisper_build_graph_decoder(
 
                     v = ggml_view_1d(ctx0, kv_self.v, n_tokens*n_state,
                             (ggml_element_size(kv_self.v)*n_state)*(il*n_ctx + kv_head));
+
+                    Vcur = ggml_reshape_1d(ctx0, Vcur, n_tokens*n_state);
                 } else {
                     Vcur = ggml_transpose(ctx0, ggml_reshape_2d(ctx0, Vcur, n_state, n_tokens));
 
@@ -2645,7 +2653,7 @@ static struct ggml_cgraph * whisper_build_graph_decoder(
                             (il*n_ctx)*ggml_element_size(kv_self.v)*n_state + kv_head*ggml_element_size(kv_self.v));
                 }
 
-                ggml_build_forward_expand(gf, ggml_cpy(ctx0, Kcur, k));
+                ggml_build_forward_expand(gf, ggml_cpy(ctx0, ggml_reshape_1d(ctx0, Kcur, n_tokens*n_state), k));
                 ggml_build_forward_expand(gf, ggml_cpy(ctx0, Vcur, v));
             }
 
