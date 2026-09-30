@@ -16,7 +16,6 @@
 build/
 build-*/
 build_*/
-pkg-*/
 tmp/
 
 # SPM
@@ -69,4 +68,3 @@ local.properties
 
 # AGENTS
 .pi/SYSTEM.md
-*.pyc
